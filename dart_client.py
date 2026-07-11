@@ -11,7 +11,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 BASE_URL = "https://opendart.fss.or.kr/api"
-CORP_CODE_CACHE = Path(__file__).parent / "corp_codes.json"
+CORP_CODE_CACHE = Path(__file__).parent / "data" / "corp_codes.json"
 
 MAIN_ACCOUNTS = [
     "매출액",
@@ -56,6 +56,7 @@ def _download_corp_codes():
         stock_code = (node.findtext("stock_code") or "").strip()
         corps.append({"corp_code": corp_code, "corp_name": corp_name, "stock_code": stock_code})
 
+    CORP_CODE_CACHE.parent.mkdir(parents=True, exist_ok=True)
     CORP_CODE_CACHE.write_text(json.dumps(corps, ensure_ascii=False), encoding="utf-8")
     return corps
 
@@ -86,6 +87,39 @@ def find_company(name, corp_codes=None):
     if len(candidates) == 1:
         return candidates[0], []
     return None, candidates[:20]
+
+
+def search_companies(query, corp_codes=None, limit=20):
+    """자동완성 검색용. 정확일치 > 접두어일치 > 포함일치 순으로 묶고,
+    각 묶음 안에서는 상장사 우선, 이름이 짧은(더 관련도 높은) 순으로 정렬한다."""
+    query = (query or "").strip()
+    if not query:
+        return []
+    corp_codes = corp_codes if corp_codes is not None else load_corp_codes()
+
+    matches = [c for c in corp_codes if query in c["corp_name"]]
+
+    def rank(c):
+        name = c["corp_name"]
+        if name == query:
+            group = 0
+        elif name.startswith(query):
+            group = 1
+        else:
+            group = 2
+        return (group, 0 if c["stock_code"] else 1, len(name), name)
+
+    matches.sort(key=rank)
+    return matches[:limit]
+
+
+def get_company_by_code(corp_code, corp_codes=None):
+    """corp_code로 회사 정보 조회 (클라이언트가 보낸 corp_code 검증용)."""
+    corp_codes = corp_codes if corp_codes is not None else load_corp_codes()
+    for c in corp_codes:
+        if c["corp_code"] == corp_code:
+            return c
+    return None
 
 
 def get_financial_statement(corp_code, year, reprt_code="11011", fs_div="CFS"):

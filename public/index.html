@@ -1,0 +1,226 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>재무분석기</title>
+<style>
+  :root { color-scheme: light dark; }
+  body {
+    font-family: -apple-system, "Segoe UI", "Malgun Gothic", sans-serif;
+    max-width: 640px;
+    margin: 40px auto;
+    padding: 0 20px;
+    color: #1a1a1a;
+    background: #fff;
+  }
+  h1 { font-size: 22px; margin-bottom: 4px; }
+  p.sub { color: #666; margin-top: 0; font-size: 14px; }
+  .company-row { margin-bottom: 16px; position: relative; }
+  label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 4px; color: #444; }
+  input[type="text"], input[type="number"] {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 10px 12px;
+    font-size: 15px;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+  }
+  input.selected { border-color: #4472C4; background: #eef2fb; }
+  .suggestions {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background: #fff;
+    border: 1px solid #ccc;
+    border-top: none;
+    border-radius: 0 0 6px 6px;
+    max-height: 220px;
+    overflow-y: auto;
+    z-index: 10;
+    display: none;
+  }
+  .suggestions div {
+    padding: 8px 12px;
+    cursor: pointer;
+    font-size: 14px;
+  }
+  .suggestions div:hover, .suggestions div.active { background: #eef2fb; }
+  .years-row { display: flex; gap: 10px; margin-bottom: 20px; }
+  .years-row div { flex: 1; }
+  button#submitBtn {
+    width: 100%;
+    padding: 12px;
+    font-size: 16px;
+    font-weight: 600;
+    color: #fff;
+    background: #4472C4;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+  }
+  button#submitBtn:disabled { background: #aaa; cursor: not-allowed; }
+  #status { margin-top: 14px; font-size: 14px; min-height: 20px; }
+  #status.error { color: #c0392b; }
+  #status.ok { color: #2e7d32; }
+</style>
+</head>
+<body>
+  <h1>재무분석기</h1>
+  <p class="sub">기업 3곳을 검색해 선택하고, 최근 3개년 재무제표를 엑셀로 비교하세요.</p>
+
+  <div id="companies"></div>
+
+  <div class="years-row" id="years"></div>
+
+  <button id="submitBtn" disabled>비교하기</button>
+  <div id="status"></div>
+
+<script>
+const state = {
+  companies: [null, null, null],
+};
+
+const currentYear = new Date().getFullYear();
+const defaultYears = [currentYear - 3, currentYear - 2, currentYear - 1];
+
+const companiesEl = document.getElementById('companies');
+const yearsEl = document.getElementById('years');
+const submitBtn = document.getElementById('submitBtn');
+const statusEl = document.getElementById('status');
+
+function debounce(fn, delay) {
+  let timer;
+  return (...args) => {
+    clearTimeout(timer);
+    timer = setTimeout(() => fn(...args), delay);
+  };
+}
+
+function updateSubmitState() {
+  submitBtn.disabled = state.companies.some(c => !c);
+}
+
+function buildCompanyRow(index) {
+  const row = document.createElement('div');
+  row.className = 'company-row';
+  row.innerHTML = `
+    <label>회사 ${index + 1}</label>
+    <input type="text" placeholder="회사명을 입력하세요 (예: 삼성전자)" autocomplete="off">
+    <div class="suggestions"></div>
+  `;
+  const input = row.querySelector('input');
+  const suggestionsEl = row.querySelector('.suggestions');
+
+  const search = debounce(async (query) => {
+    if (!query.trim()) {
+      suggestionsEl.style.display = 'none';
+      return;
+    }
+    try {
+      const res = await fetch('/api/search?q=' + encodeURIComponent(query));
+      const results = await res.json();
+      renderSuggestions(results);
+    } catch (e) {
+      suggestionsEl.style.display = 'none';
+    }
+  }, 250);
+
+  function renderSuggestions(results) {
+    if (!results.length) {
+      suggestionsEl.style.display = 'none';
+      return;
+    }
+    suggestionsEl.innerHTML = results.map(c =>
+      `<div data-corp-code="${c.corp_code}" data-corp-name="${c.corp_name}">${c.corp_name}${c.stock_code ? ' (' + c.stock_code + ')' : ''}</div>`
+    ).join('');
+    suggestionsEl.style.display = 'block';
+  }
+
+  input.addEventListener('input', () => {
+    state.companies[index] = null;
+    input.classList.remove('selected');
+    updateSubmitState();
+    search(input.value);
+  });
+
+  suggestionsEl.addEventListener('click', (e) => {
+    const target = e.target.closest('div[data-corp-code]');
+    if (!target) return;
+    input.value = target.dataset.corpName;
+    input.classList.add('selected');
+    state.companies[index] = {
+      corp_code: target.dataset.corpCode,
+      corp_name: target.dataset.corpName,
+    };
+    suggestionsEl.style.display = 'none';
+    updateSubmitState();
+  });
+
+  document.addEventListener('click', (e) => {
+    if (!row.contains(e.target)) {
+      suggestionsEl.style.display = 'none';
+    }
+  });
+
+  return row;
+}
+
+function buildYearInput(index) {
+  const wrap = document.createElement('div');
+  wrap.innerHTML = `
+    <label>연도 ${index + 1}</label>
+    <input type="number" value="${defaultYears[index]}" min="2000" max="${currentYear}">
+  `;
+  return wrap;
+}
+
+for (let i = 0; i < 3; i++) {
+  companiesEl.appendChild(buildCompanyRow(i));
+}
+for (let i = 0; i < 3; i++) {
+  yearsEl.appendChild(buildYearInput(i));
+}
+
+submitBtn.addEventListener('click', async () => {
+  const years = Array.from(yearsEl.querySelectorAll('input')).map(i => parseInt(i.value, 10));
+
+  statusEl.className = '';
+  statusEl.textContent = '조회 중입니다... (최대 30초 소요될 수 있어요)';
+  submitBtn.disabled = true;
+
+  try {
+    const res = await fetch('/api/compare', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ companies: state.companies, years }),
+    });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: '알 수 없는 오류' }));
+      throw new Error(err.error || '요청이 실패했습니다.');
+    }
+
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = '재무비교.xlsx';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+
+    statusEl.className = 'ok';
+    statusEl.textContent = '완료! 엑셀 파일이 다운로드되었습니다.';
+  } catch (e) {
+    statusEl.className = 'error';
+    statusEl.textContent = e.message;
+  } finally {
+    updateSubmitState();
+  }
+});
+</script>
+</body>
+</html>

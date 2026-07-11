@@ -13,6 +13,8 @@ __pycache__/
 .venv/
 venv/
 
-# 재무분석기 캐시/출력
-corp_codes.json
+# 재무분석기 캐시/출력 (data/corp_codes.json은 배포 번들용으로 추적함)
 *.xlsx
+
+# Vercel
+.vercel
