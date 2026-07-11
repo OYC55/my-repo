@@ -3,6 +3,7 @@
 
 # 로컬 전용 Claude 설정
 .claude/settings.local.json
+.claude/scheduled_tasks.lock
 
 # 실수로 생긴 중첩 저장소
 my-repo/

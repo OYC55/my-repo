@@ -43,7 +43,7 @@ def _get_api_key():
 
 
 def _download_corp_codes():
-    resp = requests.get(BASE_URL + "/corpCode.xml", params={"crtfc_key": _get_api_key()})
+    resp = requests.get(BASE_URL + "/corpCode.xml", params={"crtfc_key": _get_api_key()}, timeout=30)
     resp.raise_for_status()
     with zipfile.ZipFile(io.BytesIO(resp.content)) as zf:
         xml_bytes = zf.read("CORPCODE.xml")
@@ -134,6 +134,7 @@ def get_financial_statement(corp_code, year, reprt_code="11011", fs_div="CFS"):
                 "reprt_code": reprt_code,
                 "fs_div": div,
             },
+            timeout=15,
         )
         resp.raise_for_status()
         data = resp.json()
