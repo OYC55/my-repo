@@ -68,11 +68,12 @@ def load_corp_codes(force_refresh=False):
 
 
 def find_company(name, corp_codes=None):
-    """회사명으로 검색. 정확히 일치하는 상장사를 우선 반환하고,
+    """회사명으로 검색(영문 대소문자 구분 안 함). 정확히 일치하는 상장사를 우선 반환하고,
     없으면 후보 목록(부분일치)을 반환한다."""
     corp_codes = corp_codes if corp_codes is not None else load_corp_codes()
+    name_cf = name.casefold()
 
-    exact = [c for c in corp_codes if c["corp_name"] == name]
+    exact = [c for c in corp_codes if c["corp_name"].casefold() == name_cf]
     if len(exact) == 1:
         return exact[0], []
     if len(exact) > 1:
@@ -81,7 +82,7 @@ def find_company(name, corp_codes=None):
             return listed[0], []
         return None, listed or exact
 
-    partial = [c for c in corp_codes if name in c["corp_name"]]
+    partial = [c for c in corp_codes if name_cf in c["corp_name"].casefold()]
     listed_partial = [c for c in partial if c["stock_code"]]
     candidates = listed_partial or partial
     if len(candidates) == 1:
@@ -90,24 +91,25 @@ def find_company(name, corp_codes=None):
 
 
 def search_companies(query, corp_codes=None, limit=20):
-    """자동완성 검색용. 정확일치 > 접두어일치 > 포함일치 순으로 묶고,
+    """자동완성 검색용(영문 대소문자 구분 안 함). 정확일치 > 접두어일치 > 포함일치 순으로 묶고,
     각 묶음 안에서는 상장사 우선, 이름이 짧은(더 관련도 높은) 순으로 정렬한다."""
     query = (query or "").strip()
     if not query:
         return []
     corp_codes = corp_codes if corp_codes is not None else load_corp_codes()
+    query_cf = query.casefold()
 
-    matches = [c for c in corp_codes if query in c["corp_name"]]
+    matches = [c for c in corp_codes if query_cf in c["corp_name"].casefold()]
 
     def rank(c):
-        name = c["corp_name"]
-        if name == query:
+        name_cf = c["corp_name"].casefold()
+        if name_cf == query_cf:
             group = 0
-        elif name.startswith(query):
+        elif name_cf.startswith(query_cf):
             group = 1
         else:
             group = 2
-        return (group, 0 if c["stock_code"] else 1, len(name), name)
+        return (group, 0 if c["stock_code"] else 1, len(c["corp_name"]), name_cf)
 
     matches.sort(key=rank)
     return matches[:limit]
