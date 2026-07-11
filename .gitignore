@@ -1,0 +1,14 @@
+# 환경 변수 / 비밀 정보
+.env
+
+# 로컬 전용 Claude 설정
+.claude/settings.local.json
+
+# 실수로 생긴 중첩 저장소
+my-repo/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
