@@ -12,3 +12,7 @@ __pycache__/
 *.py[cod]
 .venv/
 venv/
+
+# 재무분석기 캐시/출력
+corp_codes.json
+*.xlsx
