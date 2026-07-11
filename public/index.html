@@ -66,6 +66,29 @@
   #status { margin-top: 14px; font-size: 14px; min-height: 20px; }
   #status.error { color: #c0392b; }
   #status.ok { color: #2e7d32; }
+  #results { display: none; margin-top: 24px; }
+  .table-scroll { overflow-x: auto; border: 1px solid #ddd; border-radius: 6px; }
+  table.compare-table { border-collapse: collapse; width: 100%; font-size: 13px; }
+  table.compare-table th, table.compare-table td {
+    border: 1px solid #ddd;
+    padding: 6px 10px;
+    text-align: right;
+    white-space: nowrap;
+  }
+  table.compare-table thead th { background: #4472C4; color: #fff; text-align: center; }
+  table.compare-table td.label { text-align: left; font-weight: 600; background: #f7f7f9; }
+  button#downloadBtn {
+    width: 100%;
+    margin-top: 12px;
+    padding: 12px;
+    font-size: 15px;
+    font-weight: 600;
+    color: #4472C4;
+    background: #fff;
+    border: 1px solid #4472C4;
+    border-radius: 6px;
+    cursor: pointer;
+  }
 </style>
 </head>
 <body>
@@ -79,6 +102,13 @@
   <button id="submitBtn" disabled>비교하기</button>
   <div id="status"></div>
 
+  <div id="results">
+    <div class="table-scroll">
+      <table class="compare-table" id="resultsTable"></table>
+    </div>
+    <button id="downloadBtn">엑셀 다운로드</button>
+  </div>
+
 <script>
 const state = {
   companies: [null, null, null],
@@ -91,6 +121,10 @@ const companiesEl = document.getElementById('companies');
 const yearsEl = document.getElementById('years');
 const submitBtn = document.getElementById('submitBtn');
 const statusEl = document.getElementById('status');
+const resultsEl = document.getElementById('results');
+const resultsTable = document.getElementById('resultsTable');
+const downloadBtn = document.getElementById('downloadBtn');
+let lastXlsxBase64 = null;
 
 function debounce(fn, delay) {
   let timer;
@@ -185,12 +219,72 @@ for (let i = 0; i < 3; i++) {
   yearsEl.appendChild(buildYearInput(i));
 }
 
+function formatValue(value, isRatio) {
+  if (value === null || value === undefined) return '-';
+  return isRatio ? value.toFixed(2) + '%' : value.toLocaleString('ko-KR');
+}
+
+function renderResultsTable(payload) {
+  const { companies, years, rows, ratio_rows, data } = payload;
+  const ratioSet = new Set(ratio_rows);
+
+  let html = '<thead><tr><th>항목</th>';
+  companies.forEach(c => {
+    html += `<th colspan="${years.length}">${c.corp_name}</th>`;
+  });
+  html += '</tr><tr><th></th>';
+  companies.forEach(() => {
+    years.forEach(y => { html += `<th>${y}년</th>`; });
+  });
+  html += '</tr></thead><tbody>';
+
+  rows.forEach(row => {
+    html += `<tr><td class="label">${row}</td>`;
+    companies.forEach(c => {
+      years.forEach(y => {
+        const yearData = data[c.corp_name] && data[c.corp_name][y];
+        const value = yearData ? yearData[row] : null;
+        html += `<td>${formatValue(value, ratioSet.has(row))}</td>`;
+      });
+    });
+    html += '</tr>';
+  });
+  html += '</tbody>';
+
+  resultsTable.innerHTML = html;
+  resultsEl.style.display = 'block';
+}
+
+function base64ToBlob(base64, mimeType) {
+  const byteChars = atob(base64);
+  const byteNumbers = new Array(byteChars.length);
+  for (let i = 0; i < byteChars.length; i++) byteNumbers[i] = byteChars.charCodeAt(i);
+  return new Blob([new Uint8Array(byteNumbers)], { type: mimeType });
+}
+
+downloadBtn.addEventListener('click', () => {
+  if (!lastXlsxBase64) return;
+  const blob = base64ToBlob(
+    lastXlsxBase64,
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+  );
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = '재무비교.xlsx';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+});
+
 submitBtn.addEventListener('click', async () => {
   const years = Array.from(yearsEl.querySelectorAll('input')).map(i => parseInt(i.value, 10));
 
   statusEl.className = '';
   statusEl.textContent = '조회 중입니다... (최대 30초 소요될 수 있어요)';
   submitBtn.disabled = true;
+  resultsEl.style.display = 'none';
 
   try {
     const res = await fetch('/api/compare', {
@@ -199,23 +293,17 @@ submitBtn.addEventListener('click', async () => {
       body: JSON.stringify({ companies: state.companies, years }),
     });
 
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({ error: '알 수 없는 오류' }));
-      throw new Error(err.error || '요청이 실패했습니다.');
+    const payload = await res.json().catch(() => null);
+
+    if (!res.ok || !payload) {
+      throw new Error((payload && payload.error) || '요청이 실패했습니다.');
     }
 
-    const blob = await res.blob();
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = '재무비교.xlsx';
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(url);
+    lastXlsxBase64 = payload.xlsx_base64;
+    renderResultsTable(payload);
 
     statusEl.className = 'ok';
-    statusEl.textContent = '완료! 엑셀 파일이 다운로드되었습니다.';
+    statusEl.textContent = '완료! 아래에서 결과를 확인하고 엑셀로도 받을 수 있습니다.';
   } catch (e) {
     statusEl.className = 'error';
     statusEl.textContent = e.message;

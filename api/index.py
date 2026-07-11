@@ -1,13 +1,14 @@
+import base64
 import sys
 from io import BytesIO
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from flask import Flask, jsonify, request, send_file
+from flask import Flask, jsonify, request
 
-from analysis import fetch_data
-from dart_client import get_company_by_code, load_corp_codes, search_companies
+from analysis import RATIO_LABELS, fetch_data
+from dart_client import MAIN_ACCOUNTS, get_company_by_code, load_corp_codes, search_companies
 from excel_builder import build_workbook
 
 app = Flask(__name__)
@@ -66,11 +67,12 @@ def compare():
 
     buf = BytesIO()
     wb.save(buf)
-    buf.seek(0)
 
-    return send_file(
-        buf,
-        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        as_attachment=True,
-        download_name="재무비교.xlsx",
-    )
+    return jsonify({
+        "companies": companies,
+        "years": years,
+        "rows": list(MAIN_ACCOUNTS) + RATIO_LABELS,
+        "ratio_rows": RATIO_LABELS,
+        "data": data,
+        "xlsx_base64": base64.b64encode(buf.getvalue()).decode("ascii"),
+    })
