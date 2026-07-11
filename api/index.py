@@ -12,6 +12,13 @@ from excel_builder import build_workbook
 
 app = Flask(__name__)
 
+
+@app.errorhandler(Exception)
+def handle_exception(e):
+    """예상치 못한 서버 오류도 HTML이 아닌 JSON으로 반환해 원인을 바로 알 수 있게 한다."""
+    return jsonify({"error": str(e)}), 500
+
+
 _corp_codes_cache = None
 
 
